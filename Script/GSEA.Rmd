@@ -1,0 +1,138 @@
+---
+title: "GSEA and Functional enrichment analysis of DEGs"
+author: "Umar Faruk Saidu"
+date: "2024-08-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+## Gene Set Enrichment Analysis (GSEA)
+
+This is an R Markdown document that contains code chunks for Gene Set Enrichment Analysis (GSEA). We are going to create important visualizations such as the gsea plot, dot plot, and ridge plot.
+
+First, perform GSEA for diabetes dataset.
+
+```{r}
+
+# Prepare ranked gene list for GSEA
+degs_diabetes <- as.data.frame(degs_diabetes)
+degs_diabetes <- rownames_to_column(degs_diabetes, "Gene")
+
+ranked_genes_diabetes <- degs_diabetes$logFC
+names(ranked_genes_diabetes) <- degs_diabetes$Gene
+ranked_genes_diabetes <- sort(ranked_genes_diabetes, decreasing = TRUE)
+
+# Perform GSEA for diabetes DEGs
+
+gsea_diabetes <- gseGO(geneList = ranked_genes_diabetes,
+                       OrgDb = org.Rn.eg.db,
+                       ont = "BP",
+                       keyType = "SYMBOL",
+                       pvalueCutoff = 0.05,
+                       verbose = TRUE,
+                       pAdjustMethod = "none")
+
+summary(gsea_diabetes)
+
+gsea_diabetes_plot <- gseaplot2(gsea_diabetes, geneSetID = gsea_diabetes$ID[1:5])
+print(gsea_diabetes_plot)
+
+# Save plot to file
+ggsave("~/WGCNADMTBI/Output/gsea_diabetes_plot.png", plot = gsea_diabetes_plot, height = 6, width = 8)
+
+```
+
+Now, perform GSEA for the TBI dataset.
+
+```{r}
+
+# Prepare ranked gene list for GSEA
+degs_tbi <- as.data.frame(degs_tbi)
+rownames_to_column(degs_tbi, "Gene")
+
+ranked_genes_tbi <- degs_tbi$logFC
+names(ranked_genes_tbi) <- degs_tbi$Gene
+ranked_genes_tbi <- sort(ranked_genes_tbi, decreasing = TRUE)
+
+# Perform GSEA for TBI DEGs
+gsea_tbi <- gseGO(geneList = ranked_genes_tbi,
+                       OrgDb = org.Rn.eg.db,
+                       ont = "BP",
+                       keyType = "SYMBOL",
+                       nPermSimple = 10000,
+                       pvalueCutoff = 0.05,
+                       verbose = TRUE,
+                       pAdjustMethod = "none")
+
+summary(gsea_tbi)
+
+gsea_tbi_plot <- gseaplot2(gsea_tbi, geneSetID = gsea_tbi$ID[1:5])
+print(gsea_tbi_plot)
+
+# Save plot to file
+ggsave("~/WGCNADMTBI/Output/gsea_tbi_plot.png", plot = gsea_tbi_plot, height = 6, width = 8)
+
+```
+
+Let create dot plots. This will show us the activated and suppressed biological processes in the disease compared to healthy controls.
+
+```{r}
+
+# Create dot plot for diabetes
+gsea_diabetes_dot <- dotplot(gsea_diabetes, showCategory = 8, split = '.sign') +
+  facet_grid(.~.sign) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 8)
+        )
+
+print(gsea_diabetes_dot)
+
+# Create dot plot for TBI
+gsea_tbi_dot <- dotplot(gsea_tbi, showCategory = 8, split = '.sign') +
+  facet_grid(.~.sign) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 8)
+        )
+
+print(gsea_tbi_dot)
+
+# Save the plots
+ggsave("~/WGCNADMTBI/Output/gsea_diabetes_dot.png", plot = gsea_diabetes_dot, height = 6, width = 8)
+ggsave("~/WGCNADMTBI/Output/gsea_tbi_dot.png", plot = gsea_tbi_dot, height = 6, width = 8)
+
+```
+
+Let create ridge plots. This plot will show us the enrichment distribution pattern of the enriched biological processes in the disease.
+
+```{r}
+
+# Create ridge plot for diabetes
+gsea_diabetes_ridge <- ridgeplot(gsea_diabetes) +
+  labs(x = "Enrichment Distribution") +
+  theme(axis.text.y = element_text(size = 8))
+
+print(gsea_diabetes_ridge)
+
+# Create ridge plot for TBI
+gsea_tbi_ridge <- ridgeplot(gsea_tbi) +
+  labs(x = "Enrichment Distribution") +
+  theme(axis.text.y = element_text(size = 8))
+
+print(gsea_tbi_ridge)
+
+# Save the plots
+ggsave("~/WGCNADMTBI/Output/gsea_diabetes_ridge.png", plot = gsea_diabetes_ridge, height = 6, width = 8)
+ggsave("~/WGCNADMTBI/Output/gsea_tbi_ridge.png", plot = gsea_tbi_ridge, height = 6, width = 8)
+
+```
+
+We were interested in using Metascape to further functionally annotate our gene sets. As a result, we exported the ranked gene sets and loaded them into Metascape. After the analysis, we combined the image result with the rest of our GSEA plots.

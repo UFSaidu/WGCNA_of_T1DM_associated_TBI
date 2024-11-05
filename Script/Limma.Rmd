@@ -1,0 +1,418 @@
+---
+title: "Identification of DEGs using Limma package"
+author: "Umar Faruk Saidu"
+date: "2024-08-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+## Identification of DEGs Using Limma
+
+This is an R Markdown document that contains code chunks for differential expression analysis. We are going to perform differential gene expression analysis to identify differentially expressed genes (DEGs) in our datasets. Remember, we will continue our analysis using the batch corrected data. We will employ "Limma" bioconductor R package to identify the DEGs.
+
+```{r}
+
+# Convert the data to a DGEList objects
+dge_diabetes <- DGEList(counts = combat_expr_diabetes)
+
+# Normalize the data (already normalized, but ensure it's ready for limma)
+dge_diabetes <- calcNormFactors(dge_diabetes)
+
+# Create design matrix for the analysis
+design_diabetes <- model.matrix(~0 + Batch + Group, data = combined_trait_diabetes)
+ 
+# Apply voom transformation
+v_diabetes <- voom(dge_diabetes, design_diabetes, plot = TRUE)
+
+# Fit the linear models to the transformed data and apply empirical Bayes moderation
+fit_diabetes <- lmFit(v_diabetes, design_diabetes)
+fit_diabetes <- eBayes(fit_diabetes)
+
+# Identify differentially expressed genes (DEGs)
+# Use topTable function to extract DEGs
+
+degs_diabetes <- topTable(fit_diabetes, coef = "GroupT1DM", number = Inf, p.value = 0.05, adjust = "BH")
+
+# Now filter DEGs that have p < 0.05 and |log2FC| > 0.25
+UP_degs_diabetes <- degs_diabetes[degs_diabetes$logFC > 0.25, ]
+DOWN_degs_diabetes <- degs_diabetes[degs_diabetes$logFC < -0.25,]
+
+write.csv(degs_diabetes, "~/WGCNADMTBI/Output/degs_diabetes.csv", row.names = TRUE)
+write.csv(UP_degs_diabetes, "~/WGCNADMTBI/Output/UP_degs_diabetes.csv", row.names = TRUE)
+write.csv(DOWN_degs_diabetes, "~/WGCNADMTBI/Output/DOWN_degs_diabetes.csv", row.names = TRUE)
+
+```
+
+
+```{r}
+
+# Convert the data to a DGEList objects
+dge_tbi <- DGEList(counts = combat_expr_tbi)
+
+# Normalize the data (already normalized, but ensure it's ready for limma)
+dge_tbi <- calcNormFactors(dge_tbi)
+
+# Create design matrix for the analysis
+design_tbi <- model.matrix(~0 + Batch + Group, data = combined_trait_tbi)
+ 
+# Apply voom transformation
+v_tbi <- voom(dge_tbi, design_tbi, plot = TRUE)
+
+# Fit the linear models to the transformed data and apply empirical Bayes moderation
+fit_tbi <- lmFit(v_tbi, design_tbi)
+fit_tbi <- eBayes(fit_tbi)
+
+# Identify differentially expressed genes (DEGs)
+# Use topTable function to extract DEGs
+
+degs_tbi <- topTable(fit_tbi, coef = "GroupTBI", number = Inf, p.value = 0.05, adjust = "BH")
+
+# Now filter DEGs that have p < 0.05 and |log2FC| > 0.25
+UP_degs_tbi <- degs_tbi[degs_tbi$logFC > 0.25, ]
+DOWN_degs_tbi <- degs_tbi[degs_tbi$logFC < -0.25,]
+
+write.csv(degs_tbi, "~/WGCNADMTBI/Output/degs_tbi.csv", row.names = TRUE)
+write.csv(UP_degs_tbi, "~/WGCNADMTBI/Output/UP_degs_tbi.csv", row.names = TRUE)
+write.csv(DOWN_degs_tbi, "~/WGCNADMTBI/Output/DOWN_degs_tbi.csv", row.names = TRUE)
+
+```
+
+Next were are going to create appealing visualizations of our DEGs.
+
+```{r}
+
+# Calculate the counts for each category in diabetes
+diabetes_counts <- c(
+  "Total - DEGs" = nrow(degs_diabetes),
+  "Upregulated - DEGs" = nrow(UP_degs_diabetes),
+  "Downregulated - DEGs" = nrow(DOWN_degs_diabetes)
+)
+
+# Create data frame for plotting 
+diabetes_df <- data.frame(
+  Category = names(diabetes_counts),
+  Count = diabetes_counts
+)
+
+diabetes_df$Category <- factor(diabetes_df$Category, levels = diabetes_df$Category[order(diabetes_df$Count, decreasing = TRUE)])
+
+# Plot the diabetes DEGs bar plot
+bar_diabetes <- ggplot(diabetes_df, aes(x = Category, y = Count, fill = Category)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), vjust = -0.3, size = 3.5)
+  theme_classic() +
+  labs(title = "DEGs Categories for Diabetes",
+       x = "Category",
+       y = "Number of Genes") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+  
+print(bar_diabetes)
+
+ggsave("~/WGCNADMTBI/Output/bar_diabetes.png", plot = bar_diabetes)
+
+```
+
+
+```{r}
+
+# Calculate the counts for each category in TBI
+tbi_counts <- c(
+  "Total - DEGs" = nrow(degs_tbi),
+  "Upregulated - DEGs" = nrow(UP_degs_tbi),
+  "Downregulated - DEGs" = nrow(DOWN_degs_tbi)
+)
+
+# Create data frame for plotting 
+tbi_df <- data.frame(
+  Category = names(tbi_counts),
+  Count = tbi_counts
+)
+
+tbi_df$Category <- factor(tbi_df$Category, levels = tbi_df$Category[order(tbi_df$Count, decreasing = TRUE)])
+
+# Plot the TBI DEGs bar plot
+
+bar_tbi <- ggplot(tbi_df, aes(x = Category, y = Count, fill = Category)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), vjust = -0.3, size = 3.5)
+  theme_classic() +
+  labs(title = "DEGs Categories for TBI",
+       x = "Category",
+       y = "Number of Genes") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+  
+print(bar_tbi)
+
+ggsave("~/WGCNADMTBI/Output/bar_tbi.png", plot = bar_tbi)
+
+```
+
+Create a volcano plot.
+
+```{r}
+
+# Order the DEGs results by p-value and select top 15 genes
+results_diabetes_significant <- degs_diabetes[order(degs_diabetes$P.Value), ]
+top15_diabetes <- head(degs_diabetes$Gene, 15)
+
+# Volcano plot for significant genes in diabetes with top 15 genes labeled
+diabetes_volcano <- EnhancedVolcano(
+  results_diabetes_significant,
+  lab = results_diabetes_significant$Gene,
+  x = "logFC",
+  y = "P.Value",
+  selectLab = top10_diabetes,
+  boxedLabels = TRUE,
+  FCcutoff = 0.25,
+  pointSize = 3.0,
+  labSize = 4.0,
+  title = "Volcano Plot – Significant Genes in T1DM",
+  col = c("grey30", "forestgreen", "royalblue", "red2"),
+  colAlpha = 1.0,
+  legendPosition = "top",
+  legendLabSize = 12,
+  legendIconSize = 4.0,
+  drawConnectors = TRUE,
+  widthConnectors = 0.5,
+  colConnectors = "grey30"
+  )
+
+# Save to file
+ggsave("~/WGCNADMTBI/Output/diabetes_volcano.png", plot = diabetes_volcano, width = 8, height = 10)
+
+```
+
+
+```{r}
+
+# Order the DEGs results by p-value and select top 10 genes
+results_tbi_significant <- degs_tbi[order(degs_tbi$P.Value), ]
+top15_tbi <- head(degs_tbi$Gene, 15)
+
+tbi_volcano <- EnhancedVolcano(
+  results_tbi_significant,
+  lab = results_tbi_significant$Gene,
+  x = "logFC",
+  y = "P.Value",
+  selectLab = top15_tbi,
+  boxedLabels = TRUE,
+  FCcutoff = 0.25,
+  pointSize = 3.0,
+  labSize = 4.0,
+  title = "Volcano Plot – Significant Genes in TBI",
+  col = c("grey30", "forestgreen", "royalblue", "red2"),
+  colAlpha = 1.0,
+  legendPosition = "top",
+  legendLabSize = 12,
+  legendIconSize = 4.0,
+  drawConnectors = TRUE,
+  widthConnectors = 0.5,
+  colConnectors = "grey30"
+)
+
+ggsave("~/WGCNADMTBI/Output/tbi_volcano.png", plot = tbi_volcano, width = 8, height = 14)
+
+```
+
+Next we are going to create a heatmap of the top 50 DEGs in our datasets. That is the 25 upregulated genes and 25 downregulated genes based on log2foldchange.
+
+```{r}
+
+# Make the DEGS results as a dataframe
+degs_diabetes <- as.data.frame(degs_diabetes)
+
+# Order by logFC
+degs_diabetes_order <- degs_diabetes[order(degs_diabetes$logFC, decreasing = TRUE), ]
+rownames(degs_diabetes_order) <- degs_diabetes_order$Gene
+
+# Create a matrix that contain the expression values of of only the DEGs
+
+exp_degs_diabetes <- combat_expr_diabetes[rownames(combat_expr_diabetes) %in% rownames(degs_diabetes_order), ]
+
+# Scale the matrix
+exp_degs_diabetes_scaled <- t(apply(exp_degs_diabetes, 1, scale))
+colnames(exp_degs_diabetes_scaled) <- colnames(exp_degs_diabetes)
+
+# We want to plot the heatmap to contain only the top 50 DEGs
+num_keep = 25
+rows_keep_diabetes <- c(seq(1:num_keep), seq((nrow(exp_degs_diabetes_scaled) - num_keep), nrow(exp_degs_diabetes_scaled)))
+
+# We want to cluster the heatmap by treatment group
+combined_trait_diabetes$Group <- factor(combined_trait_diabetes$Group, levels = c("HC", "T1DM"))
+trait_diabetes <- data.frame(combined_trait_diabetes$Group)
+colnames(trait_diabetes) <- "Type"
+
+color_trait_diabetes <- list("Type" = c("HC" = "royalblue", "T1DM" = "red2"))
+
+# We want to plot the logFC values along with the heatmap
+logfc_diabetes <- as.matrix(degs_diabetes_order[rows_keep_diabetes,]$logFC)
+colnames(logfc_diabetes) <- "logFC"
+
+# Map values between b/w/r for min and max logFC values
+col_logfc_diabetes <- colorRamp2(c(min(logfc_diabetes), 0, max(logfc_diabetes)), c("blue", "white", "red"))
+
+# Now that we have all the values and matrix we need, let create the heatmap
+colAnn_diabetes <- HeatmapAnnotation(df = trait_diabetes,
+                      col = color_trait_diabetes,
+                      show_legend = TRUE,
+                      annotation_name_side = "left")
+
+ha_diabetes <- HeatmapAnnotation(summary = anno_summary(gp = gpar(fill = 2),
+                                                        height = unit(2, "cm")))
+
+h1_diabetes <- Heatmap(exp_degs_diabetes_scaled[rows_keep_diabetes,], cluster_rows = T,
+                       column_labels = colnames(exp_degs_diabetes_scaled), name = "expression",
+                       cluster_columns = T, row_dend_reorder = TRUE, column_dend_reorder = TRUE,
+                       clustering_method_rows = "ward.D2",
+                       clustering_method_columns = "ward.D2",
+                       width = unit(120, 'mm'),
+                       top_annotation = colAnn_diabetes)
+
+h2_diabetes <- Heatmap(logfc_diabetes, row_labels = degs_diabetes_order$Gene[rows_keep_diabetes],
+                       cluster_rows = F, name = "logFC", top_annotation = ha_diabetes,
+                       col = col_logfc_diabetes, cell_fun = function(j, i, x, y, w, h, col) {
+                       grid.text(round(logfc_diabetes[i, j], 2), x, y)
+                        })
+
+heatmap_diabetes <- h1_diabetes + h2_diabetes
+
+heatmap_diabetes
+
+# save the plot
+png("~/WGCNADMTBI/Output/heatmap_diabetes.png", res = 600, width = 5000, height = 5500)
+print(heatmap_diabetes)
+dev.off()
+
+```
+
+Plot heatmap for the TBI dataset.
+
+```{r}
+
+# Make the DEGS results as a dataframe
+degs_tbi <- as.data.frame(degs_tbi)
+
+# Order by logFC
+degs_tbi_order <- degs_tbi[order(degs_tbi$logFC, decreasing = TRUE), ]
+rownames(degs_tbi_order) <- degs_tbi_order$Gene
+
+# Create a matrix that contain the expression values of of only the DEGs
+
+exp_degs_tbi <- combat_expr_tbi[rownames(combat_expr_tbi) %in% rownames(degs_tbi_order), ]
+
+# Scale the matrix
+exp_degs_tbi_scaled <- t(apply(exp_degs_tbi, 1, scale))
+colnames(exp_degs_tbi_scaled) <- colnames(exp_degs_tbi)
+
+# We want to plot the heatmap to contain only the top 50 DEGs
+num_keep = 25
+rows_keep_tbi <- c(seq(1:num_keep), seq((nrow(exp_degs_tbi_scaled) - num_keep), nrow(exp_degs_tbi_scaled)))
+
+trait_tbi <- data.frame(combined_trait_tbi$Group)
+colnames(trait_tbi) <- "Type"
+color_trait_tbi <- list("Type" = c("HC" = "royalblue", "TBI" = "red2"))
+
+# We want to plot the logFC values along with the heatmap
+logfc_tbi <- as.matrix(degs_tbi_order[rows_keep_tbi,]$logFC)
+colnames(logfc_tbi) <- "logFC"
+
+# Map values between b/w/r for min and max logFC values
+col_logfc_tbi <- colorRamp2(c(min(logfc_tbi), 0, max(logfc_tbi)), c("blue", "white", "red"))
+
+# Now that we have all the values and matrix we need, let create the heatmap
+colAnn_tbi <- HeatmapAnnotation(df = trait_tbi,
+                                     which = 'col',
+                                     col = color_trait_tbi,
+                                     annotation_width = unit(c(1, 2), 'cm'),
+                                     gap = unit(1, 'mm'),
+                                     annotation_name_side = "left")
+
+ha_tbi <- HeatmapAnnotation(summary = anno_summary(gp = gpar(fill = 2),
+                                                        height = unit(2, "cm")))
+
+h1_tbi <- Heatmap(exp_degs_tbi_scaled[rows_keep_tbi,], cluster_rows = TRUE,
+                       column_labels = colnames(exp_degs_tbi_scaled), name = "expression",
+                       cluster_columns = T,row_dend_reorder = TRUE, column_dend_reorder = TRUE,
+                       clustering_method_rows = "ward.D2",
+                       clustering_method_columns = "ward.D2",
+                       width = unit(120, 'mm'),
+                       top_annotation = colAnn_tbi)
+
+h2_tbi <- Heatmap(logfc_tbi, row_labels = degs_tbi_order$Gene[rows_keep_tbi],
+                       cluster_rows = F, name = "logFC", top_annotation = ha_tbi,
+                       col = col_logfc_tbi, cell_fun = function(j, i, x, y, w, h, col) {
+                       grid.text(round(logfc_tbi[i, j], 2), x, y)
+                        })
+
+heatmap_tbi <- h1_tbi + h2_tbi
+print(h1_tbi)
+print(h2_tbi)
+print(heatmap_tbi)
+
+# save the plot
+png("~/WGCNADMTBI/Output/heatmap_tbi.png", res = 600, width = 5000, height = 5500)
+print(heatmap_tbi)
+dev.off()
+
+```
+
+In some cases you might find it difficult to plot using ComplexHeatmap due to its complexity. You might encounter difficulties especially with annotations and other form of customization. Thus, we provided a simpler alternative using pheatmap. pheatmap have simpler functions and methods that are easier to implement.
+
+```{r}
+
+# Create annotation for the columns
+annotation_col_diabetes <- data.frame(
+  trait_diabetes = trait_diabetes,
+  row.names = colnames(exp_degs_diabetes_scaled)
+)
+
+ann_col_diabetes <- list(
+  trait_diabetes = c(HC = "royalblue", T1DM = "red2")
+)
+
+pMap_diabetes <- pheatmap(
+  exp_degs_diabetes_scaled[rows_keep_diabetes,],
+  annotation_col = annotation_col_diabetes,
+  annotation_colors = ann_col_diabetes,
+  show_rownames = TRUE,
+  cluster_rows = TRUE,
+  legend_labels = "expression"
+)
+
+# Save the plot
+ggsave("~/WGCNADMTBI/Output/pMap_diabetes.png", plot = pMap_diabetes, width = 8, height = 6)
+
+# Create heatmap for TBI
+
+# Create column annotation
+annotation_col_tbi <- data.frame(
+  trait_tbi = trait_tbi,
+  row.names = colnames(exp_degs_tbi_scaled)
+)
+
+ann_col_tbi <- list(
+  trait_tbi = c(HC = "royalblue", T1DM = "red2")
+)
+
+pMap_tbi <- pheatmap(
+  exp_degs_tbi_scaled[rows_keep_tbi,],
+  annotation_col = annotation_col_tbi,
+  annotation_colors = ann_col_tbi,
+  show_rownames = TRUE,
+  cluster_rows = TRUE,
+  legend_labels = "expression"
+)
+
+# Save the plot
+ggsave("~/WGCNADMTBI/Output/pMap_tbi.png", plot = pMap_tbi, width = 8, height = 6)
+
+```

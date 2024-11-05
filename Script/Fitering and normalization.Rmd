@@ -1,0 +1,105 @@
+---
+title: "Filtering and Normalization"
+author: "Umar Faruk Saidu"
+date: "2024-08-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+## Filtering and Normalization
+
+This is an R Markdown document that contains the code chunks for filtering and normalization of our expression datasets.
+
+First, filter and normalize the diabetes datasets.
+
+```{r}
+
+# Filter each dataset to include genes with expression values greater than 15 across the whole samples
+diabetes_data1 <- diabetes_data1 %>% 
+  filter(rowSums(. > 15) == ncol(.))
+
+diabetes_data2 <- diabetes_data2 %>% 
+  filter(rowSums(. > 15) == ncol(.))
+
+# Find common genes and then merge the datasets
+common_genes_diabetes <- intersect(rownames(diabetes_data1), rownames(diabetes_data2))
+
+diabetes_data1 <- diabetes_data1[common_genes_diabetes, ]
+diabetes_data2 <- diabetes_data2[common_genes_diabetes, ]
+
+# Combine original datasets
+combined_diabetes <- cbind(diabetes_data1, diabetes_data2)
+
+# Function to normalize data using TMM normalization in edgeR
+normalize_data <- function(expr_data) {
+  dge <- DGEList(counts = expr_data)
+  dge <- calcNormFactors(dge)
+  cpm_data <- cpm(dge, log = TRUE)
+  return(cpm_data)
+}
+
+# Normalize each datasets
+norm_expr_diabetes1 <- normalize_data(diabetes_data1)
+norm_expr_diabetes2 <- normalize_data(diabetes_data2)
+
+# Combine normalized expression data
+combined_expr_diabetes <- cbind(norm_expr_diabetes1, norm_expr_diabetes2)
+
+# Save normalized datasets
+write.csv(norm_expr_diabetes1, "~/WGCNADMTBI/Output/norm_expr_diabetes1.csv", row.names = TRUE)
+write.csv(norm_expr_diabetes2, "~/WGCNADMTBI/Output/norm_expr_diabetes2.csv", row.names = TRUE)
+write.csv(combined_expr_diabetes, "~/WGCNADMTBI/Output/combined_expr_diabetes.csv", row.names = TRUE)
+
+```
+
+Now, filter and normalize the TBI datasets.
+
+```{r}
+
+# Filter each dataset to include genes with expression values greater than 15 across the whole samples
+tbi_data1 <- tbi_data1 %>% 
+  filter(rowSums(. > 15) == ncol(.))
+
+tbi_data2 <- tbi_data2 %>% 
+  filter(rowSums(. > 15) == ncol(.))
+
+# Find common genes and then merge the datasets
+common_genes_tbi <- intersect(rownames(tbi_data1), rownames(tbi_data2))
+
+tbi_data1 <- tbi_data1[common_genes_tbi, ]
+tbi_data2 <- tbi_data2[common_genes_tbi, ]
+
+# Combine original datasets
+combined_tbi <- cbind(tbi_data1, tbi_data2)
+
+# Function to normalize data using TMM normalization in edgeR
+normalize_data <- function(expr_data) {
+  dge <- DGEList(counts = expr_data)
+  dge <- calcNormFactors(dge)
+  cpm_data <- cpm(dge, log = TRUE)
+  return(cpm_data)
+}
+
+# Normalize each datasets
+norm_expr_tbi1 <- normalize_data(tbi_data1)
+norm_expr_tbi2 <- normalize_data(tbi_data2)
+
+# Combine normalized expression data
+combined_expr_tbi <- cbind(norm_expr_tbi1, norm_expr_tbi2)
+
+# Save normalized datasets
+write.csv(norm_expr_tbi1, "~/WGCNADMTBI/Output/norm_expr_tbi1.csv", row.names = TRUE)
+write.csv(norm_expr_tbi2, "~/WGCNADMTBI/Output/norm_expr_tbi2.csv", row.names = TRUE)
+write.csv(combined_expr_tbi, "~/WGCNADMTBI/Output/combined_expr_tbi.csv", row.names = TRUE)
+
+```
+

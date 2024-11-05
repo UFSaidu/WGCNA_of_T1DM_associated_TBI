@@ -1,0 +1,538 @@
+---
+title: "WGCNA of Diabetes-associated TBI"
+author: "Umar Faruk Saidu"
+date: "2024-08-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+## WGCNA of Diabetes-associated TBI
+
+This is an R Markdown document that contains code chunks for WGCNA analysis of diabetes-associated TBI. In this analysis, we identified key modules and correlate them with traits in order to identify diabetes-related modules and TBI-related modules. Then, we extracted the genes in these modules. Next, we intercepted diabetes-related module and TBI-related module to find the overlapping genes linked with diabetes-associated TBI. The key genes in this modules will be use in further analysis such as functional annotation and pathway enrichment analysis.
+
+Perform WGCNA analysis for diabetes dataset.
+First ensure you have complete samples and genes.
+
+```{r}
+
+# Ensure good samples and genes for diabetes dataset
+gsg_diabetes = goodSamplesGenes(combat_expr_diabetes, verbose = 3)
+if (!gsg_diabetes$allOK) {
+combat_expr_diabetes = combat_expr_diabetes[gsg_diabetes$goodSamples,
+gsg_diabetes$goodGenes]
+}
+
+```
+
+Check for sample outliers.
+
+```{r}
+
+combat_expr_diabetes <- readRDS("~/WGCNADMTBI/combat_expr_diabetes.rds") # Optional if you have the object in the global environment
+
+# Check for outliers in diabetes dataset and compute hierarchical clustering
+sampleTree_diabetes <- hclust(dist(t(combat_expr_diabetes)), method = "average")
+
+png("~/WGCNADMTBI/Output/tree_diabetes.png", width = 700)
+plot(sampleTree_diabetes)
+dev.off()
+
+# From our samples we don't have outliers. If you identify outliers in your data and you want to remove them, you can uncomment the below codes.
+
+# samples_to_be_excluded <- c("list of samples you want to exclude")
+# data_subset <- data[, !(colnames(data) %in% samples_to_be_excluded)]
+
+# filter the metadata to exclude the removed samples
+# metadata_subset <- metadata %>% 
+#   filter(!row.names(.) %in% samples_to_be_excluded)
+
+```
+
+Perform WGCNA for the diabetes dataset.
+
+```{r}
+
+trait_diabetes <- readRDS("~/WGCNADMTBI/trait_diabetes.rds")
+
+# Ensure the rownames and colnmames are identical in trait and expression data. They should return True.
+all(rownames(trait_diabetes) %in% colnames(combat_expr_diabetes))
+all(rownames(trait_diabetes) == colnames(combat_expr_diabetes))
+
+# WGCNA requires a transpose data
+combat_expr_diabetes <- t(combat_expr_diabetes)
+
+# Choose a set of soft-threshold powers
+powers_diabetes = c(c(1:10), seq(from = 12, to = 30, by = 2))
+
+```
+
+Choose soft-threshold power and plot Scale free topology and Mean connectivity for diabetes.
+
+```{r}
+
+#=====================Soft-threshold for Scale Free Topology Model Fit================================
+
+sft_diabetes = pickSoftThreshold(combat_expr_diabetes, 
+                                 powerVector = powers_diabetes,
+                                 verbose = 5)
+
+# Prepare data for Scale Free Topology Model Fit plot for diabetes
+fit_indices_diabetes <- sft_diabetes$fitIndices
+df1 <- data.frame(
+  Power = fit_indices_diabetes[,1],
+  Fit = -sign(fit_indices_diabetes[,3]) * fit_indices_diabetes[,2],
+  Type = "Scale Independence"
+)
+
+# Prepare data for Mean Connectivity plot for diabetes
+df2 <- data.frame(
+  Power = fit_indices_diabetes[,1],
+  MeanConnect = fit_indices_diabetes[,5],
+  Type = "Mean Connectivity"
+)
+
+# Scale Independence plot for diabetes
+scale_diabetes <- ggplot(df1, aes(x = Power, y = Fit)) +
+  geom_line() +
+  geom_text(aes(label = fit_indices_diabetes[,1]), color = "red", size = 3) +
+  geom_hline(yintercept = 0.90, color = "red") +
+  labs(x = "Soft Threshold (power)", 
+       y = "Scale Free Topology Model Fit, signed R^2", 
+       title = "Scale Independence") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+
+# Mean Connectivity plot for diabetes  
+mean_diabetes <- ggplot(df2, aes(x = Power, y = MeanConnect)) +
+  geom_line() +
+  geom_text(aes(label = fit_indices_diabetes[,1]), color = "red", size = 3) +
+  labs(x = "Soft Threshold (power)", 
+       y = "Mean Connectivity", 
+       title = "Mean Connectivity") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+
+# Arrange plots in an object
+softThreshold_diabetes <- ggarrange(scale_diabetes, mean_diabetes, ncol = 2)
+print(softThreshold_diabetes)
+
+# Save the arranged plots
+ggsave("~/WGCNADMTBI//Output/softThreshold_diabetes.png", plot = softThreshold_diabetes, height = 6, width = 8)
+
+```
+
+Construct Network for diabetes using the blockwiseModules function.
+
+```{r}
+
+# Set power based on the soft-threshold power plot
+soft_power_diabetes <- 10
+temp_cor <- cor
+cor <- WGCNA::cor
+
+#==================================Construct Network===================================================
+
+net_diabetes <- blockwiseModules(combat_expr_diabetes,
+                                 maxBlockSize = 8000,
+                                 TOMType = "signed",
+                                 power = soft_power_diabetes,
+                                 mergeCutHeight = 0.25,
+                                 numericLabels = FALSE,
+                                 randomSeed = 1223,
+                                 verbose = 3)
+
+# plot dendrogram and module colors before and after merging
+png("~/WGCNADMTBI/Output/module_dendro_diabetes.png", width = 700)
+plotDendroAndColors(net_diabetes$dendrograms[[1]], 
+                    cbind(net_diabetes$unmergedColors,
+                    net_diabetes$colors),
+                    c("unmerged", "merged"),
+                    dendroLabels = FALSE,
+                    addGuide = TRUE,
+                    hang = 0.03,
+                    guideHang = 0.05)
+dev.off()
+
+cor <- temp_cor
+
+# Save module labels and module eigengenes
+moduleColors_diabetes <- labels2colors(net_diabetes$colors)
+moduleLabels_diabetes <- net_diabetes$colors
+moduleEigengenes_diabetes <- net_diabetes$MEs
+
+save(moduleColors_diabetes, moduleLabels_diabetes, moduleEigengenes_diabetes, file = "~/WGCNADMTBI/Output/diabetes_network.RData")
+
+#==============================Correlate modules with traits===========================================
+
+# Binarize categorical variables in trait data. This is required for module-trait correlation.
+
+trait_diabetes <- trait_diabetes %>% 
+  mutate(T1DM = ifelse(grepl("T1DM", Type), 1, 0)) %>% 
+  mutate(HC = ifelse(grepl("HC", Type), 1, 0)) %>% 
+  select(2,3)
+
+# Correlate module eigengenes with traits
+moduleTraitCor_diabetes <- cor(moduleEigengenes_diabetes, trait_diabetes, method = "spearman", use = "p")
+moduleTraitPvalue_diabetes <- corPvalueStudent(moduleTraitCor_diabetes, 
+                                               nSamples = ncol(combat_expr_diabetes))
+  
+# Visualize module-trait correlation as a heatmap
+heatmap_data_diabetes <- merge(moduleEigengenes_diabetes, trait_diabetes, by = 'row.names')
+heatmap_data_diabetes <- heatmap_data_diabetes %>% 
+  column_to_rownames(var = 'Row.names')
+
+png("~/WGCNADMTBI/Output/moduleTraitCor_heatmap_diabetes.png")
+CorLevelPlot(heatmap_data_diabetes,
+             x = names(heatmap_data_diabetes)[11:12],
+             y = names(heatmap_data_diabetes)[1:10],
+             col = c("blue", "skyblue", "white", "pink", "red"),
+             main = "Module-trait correlation heatmap",
+             cexMain = 1.2
+            )
+dev.off()
+
+# Save correlation results
+write.csv(moduleTraitCor_diabetes, "~/WGCNADMTBI/Output/moduleTraitCor_diabetes.csv")
+write.csv(moduleTraitPvalue_diabetes, "~/WGCNADMTBI/Output/moduleTraitPvalue_diabetes.csv")
+
+#==============================Extract genes from T1DM significant modules========================#
+
+# Based on correlation heatmap, the red nd black modules are most significantly correlated with T1DM
+module_gene_mapping_diabetes <- as.data.frame(net_diabetes$colors) # genes are saved in colors
+genes_diabetes <- module_gene_mapping_diabetes %>% 
+  filter(net_diabetes$colors %in% c('red', 'black')) %>% 
+  rownames()
+
+# Save the genes to file for further analysis
+write.csv2(genes_diabetes, "~/WGCNADMTBI/Output/genes_diabetes.txt")
+
+#=============================Intramodular analysis: To identify driver genes=========================#
+
+# The module membership also known as intramodular connectivity is calculated as the correlation of eigengene and the gene expression profile.
+
+# Get the top significance genes and associated p-values in T1DM associated module
+GS_cor_diabetes <- cor(combat_expr_diabetes, trait_diabetes$T1DM, method = "spearman", use = "p")
+GS_cor_pvals_diabetes <- corPvalueStudent(GS_cor_diabetes, nSamples = ncol(combat_expr_diabetes))
+
+#========================Module-membership Vs Gene Significance======================================#
+
+moduleMembership_diabetes <- cor(combat_expr_diabetes, moduleEigengenes_diabetes, 
+                                 method = "spearman", use = "p")
+
+# Convert to data frame and assign column names
+moduleMembership_diabetes <- as.data.frame(moduleMembership_diabetes)
+colnames(moduleMembership_diabetes) <- paste0("MM_", names(moduleEigengenes_diabetes))
+
+# Save module membership
+write.csv(moduleMembership_diabetes, "/WGCNADMTBI/Output/moduleMembership_diabetes.csv", row.names = TRUE)
+
+# Extract module membership (MM) and gene significance (GS) for red and black modules
+MM_red_diabetes <- moduleMembership_diabetes[moduleColors_diabetes == "red", "MM_MEred"]
+GS_red_diabetes <- GS_cor_diabetes[moduleColors_diabetes == "red", , drop = FALSE]
+
+MM_black_diabetes <- moduleMembership_diabetes[moduleColors_diabetes == "black", "MM_MEblack"]
+GS_black_diabetes <- GS_cor_diabetes[moduleColors_diabetes == "black", , drop = FALSE]
+
+# Combine GS and MM for plotting
+combine_GS_MM_diabetes <- data.frame(
+  GS = c(abs(GS_red_diabetes[, 1]), abs(GS_black_diabetes[, 1])),
+  MM = c(abs(MM_red_diabetes), abs(MM_black_diabetes)),
+  Module = factor(c(rep("red", length(MM_red_diabetes)), rep("black" , length(MM_black_diabetes))))
+)
+
+# Plot the combined GS Vs MM 
+plot_MM_vs_GS_diabetes <- ggplot(combine_GS_MM_diabetes, aes(x = MM, y = GS, color = Module)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Module Membership (MM)",
+       y = "Gene Significance (GS) for T1DM",
+       title = "Module Membership vs. Gene Significance\nredModule: cor = 0.80, p = 2.22e-308\nblackModule: cor = 0.46, p = 2.78e-75") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+
+
+print(plot_MM_vs_GS_diabetes)
+
+# Save plot
+ggsave("~/WGCNADMTBI/Output/plot_MM_vs_GS_diabetes.png", plot = plot_MM_vs_GS_diabetes, height = 6, width = 8, bg = "white")
+
+```
+
+Perform WGCNA analysis on TBI dataset.
+
+```{r}
+
+# Ensure good samples and genes for TBI dataset
+gsg_tbi = goodSamplesGenes(combat_expr_tbi, verbose = 3)
+if (!gsg_tbi$allOK) {
+combat_expr_tbi = combat_expr_tbi[gsg_tbi$goodSamples, gsg_tbi$goodGenes]
+}
+
+```
+
+Check for sample outliers.
+
+```{r}
+
+combat_expr_tbi <- readRDS("~/WGCNADMTBI/combat_expr_tbi.rds") # Optional if you have the object in the global environment
+
+# Check for outliers in diabetes dataset and compute hierarchical clustering
+sampleTree_tbi <- hclust(dist(t(combat_expr_tbi)), method = "average")
+
+# Save plot
+png("~/WGCNADMTBI/Output/tree_tbi.png", width = 700)
+plot(sampleTree_tbi)
+dev.off()
+
+```
+
+
+```{r}
+
+trait_tbi <- readRDS("~/WGCNADMTBI/trait_tbi.rds")
+
+# WGCNA requires a transpose data
+combat_expr_tbi <- t(combat_expr_tbi)
+
+# Ensure the rownames and colnmames are identical in trait and expression data. They should return True
+all(rownames(trait_tbi) %in% colnames(combat_expr_tbi))
+all(rownames(trait_tbi) == colnames(combat_expr_tbi))
+
+# Choose a set of soft-threshold powers
+powers_tbi = c(c(1:10), seq(from = 12, to = 50, by = 2))
+
+```
+
+
+Choose soft-threshold power and plot Scale free topology and Mean connectivity for TBI.
+
+```{r}
+
+# Prepare soft-threshold for Scale Free Topology Model Fit for TBI
+sft_tbi = pickSoftThreshold(combat_expr_tbi, powerVector = powers_tbi, verbose = 5)
+
+# Prepare data for Scale Free Topology Model Fit plot for TBI
+fit_indices_tbi <- sft_tbi$fitIndices
+df3 <- data.frame(
+  Power = fit_indices_tbi[,1],
+  Fit = -sign(fit_indices_tbi[,3]) * fit_indices_tbi[,2],
+  Type = "Scale Independence"
+)
+
+# Prepare data for Mean Connectivity plot for TBI
+df4 <- data.frame(
+  Power = fit_indices_tbi[,1],
+  MeanConnect = fit_indices_tbi[,5],
+  Type = "Mean Connectivity"
+)
+
+# Scale Independence plot for TBI
+scale_tbi <- ggplot(df3, aes(x = Power, y = Fit)) +
+  geom_line() +
+  geom_text(aes(label = fit_indices_tbi[,1]), color = "red", size = 3) +
+  geom_hline(yintercept = 0.90, color = "red") +
+  labs(x = "Soft Threshold (power)", 
+       y = "Scale Free Topology Model Fit, signed R^2", 
+       title = "Scale Independence") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+
+# Mean Connectivity plot for TBI
+mean_tbi <- ggplot(df4, aes(x = Power, y = MeanConnect)) +
+  geom_line() +
+  geom_text(aes(label = fit_indices_tbi[,1]), color = "red", size = 3) +
+  labs(x = "Soft Threshold (power)", 
+       y = "Mean Connectivity", 
+       title = "Mean Connectivity") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+
+
+# Arrange plots in an object
+softThreshold_tbi <- ggarrange(scale_tbi, mean_tbi, ncol = 2)
+print(softThreshold_tbi)
+
+# Save the arranged plots
+ggsave("~/WGCNADMTBI/Output/softThreshold_tbi.png", plot = softThreshold_tbi, height = 6, width = 8)
+
+```
+
+Construct Network using blockwiseModules function.
+
+```{r}
+
+# Set power based on the soft-threshold power plot
+soft_power_tbi <- 26
+temp_cor <- cor
+cor <- WGCNA::cor
+
+#==================================Construct Network===================================================
+
+net_tbi <- blockwiseModules(combat_expr_tbi,
+                            maxBlockSize = 10000,
+                            TOMType = "signed",
+                            power = soft_power_tbi,
+                            mergeCutHeight = 0.25,
+                            numericLabels = FALSE,
+                            randomSeed = 1995,
+                            verbose = 3)
+
+# Plot dendrogram and module colors before and after merging
+png("~/WGCNADMTBI/Output/module_dendro_tbi.png", width = 700)
+plotDendroAndColors(net_tbi$dendrograms[[1]], cbind(net_tbi$unmergedColors, net_tbi$colors),
+                    c("unmerged", "merged"),
+                    dendroLabels = FALSE,
+                    addGuide = TRUE,
+                    hang = 0.03,
+                    guideHang = 0.05)
+dev.off()
+
+cor <- temp_cor
+
+# Save module labels and module eigengenes
+moduleColors_tbi <- labels2colors(net_tbi$colors)
+moduleLabels_tbi <- net_tbi$colors
+moduleEigengenes_tbi <- net_tbi$MEs
+
+save(moduleColors_tbi, moduleLabels_tbi, moduleEigengenes_tbi, file = "~/WGCNADMTBI/Output/tbi_network.RData")
+
+#==============================Correlate modules with traits===========================================
+
+# Binarize categorical variables in trait data. This is required for module-trait correlation.
+trait_tbi <- trait_tbi %>% 
+  mutate(TBI = ifelse(grepl("TBI", Type), 1, 0)) %>% 
+  mutate(HC = ifelse(grepl("HC", Type), 1, 0)) %>% 
+  select(2,3)
+  
+# Correlate module eigengenes with traits
+moduleTraitCor_tbi <- cor(moduleEigengenes_tbi, trait_tbi, method = "spearman", use = "p")
+moduleTraitPvalue_tbi <- corPvalueStudent(moduleTraitCor_tbi, 
+                                               nSamples = ncol(combat_expr_tbi))
+
+# Visualize module-trait correlation as a heatmap
+heatmap_data_tbi <- merge(moduleEigengenes_tbi, trait_tbi, by = 'row.names')
+heatmap_data_tbi <- heatmap_data_tbi %>% 
+  column_to_rownames(var = 'Row.names')
+
+png("~/WGCNADMTBI/Output/moduleTraitCor_heatmap_tbi.png")
+CorLevelPlot(heatmap_data_tbi,
+             x = names(heatmap_data_tbi)[10:11],
+             y = names(heatmap_data_tbi)[1:9],
+             col = c("blue", "skyblue", "white", "pink", "red"),
+             main = "Module-trait correlation heatmap",
+             cexMain = 1.2)
+dev.off()
+
+# Save correlation results
+write.csv(moduleTraitCor_tbi, "~/WGCNADMTBI/Output/moduleTraitCor_tbi.csv")
+write.csv(moduleTraitPvalue_tbi, "~/WGCNADMTBI/Output/moduleTraitPvalue_tbi.csv")
+
+#==============================Extract genes from the T1DM significant modules========================
+
+# Based on correlation heatmap, the yellow module is most significantly correlated with TBI
+module_gene_mapping_tbi <- as.data.frame(net_tbi$colors) # genes are saved in colors
+genes_tbi <- module_gene_mapping_tbi %>% 
+  filter(net_tbi$colors == 'yellow') %>% 
+  rownames()
+
+# Save genes to file for further analysis
+write.csv2(genes_tbi, "~/WGCNADMTBI/Output/genes_tbi.txt")
+
+#=============================Intramodular analysis: To identify driver genes=====================
+
+# The module membership also known as intramodular connectivity is calculated as the correlation of eigengene and gene expression profile.
+
+# Get the top significance genes and associated p-values in TBI associated module
+GS_cor_tbi <- cor(combat_expr_tbi, trait_tbi$TBI, method = "spearman", use = "p")
+GS_cor_pvals_tbi <- corPvalueStudent(GS_cor_tbi, nSamples = ncol(combat_expr_tbi))
+
+#========================Module-membership Vs Gene Significance======================================#
+
+moduleMembership_tbi <- cor(combat_expr_tbi, moduleEigengenes_tbi, 
+                                 method = "spearman", use = "p")
+
+# Convert to data frame and assign column names
+moduleMembership_tbi <- as.data.frame(moduleMembership_tbi)
+colnames(moduleMembership_tbi) <- paste0("MM_", names(moduleEigengenes_tbi))
+
+# Save module membership
+write.csv(moduleMembership_tbi, "~/WGCNADMTBI/Output/moduleMembership_tbi.csv", row.names = TRUE)
+
+# Extract module membership (MM) and gene significance (GS) for yellow module
+MM_yellow_tbi <- moduleMembership_tbi[moduleColors_tbi == "yellow", "MM_MEyellow"]
+GS_yellow_tbi <- GS_cor_tbi[moduleColors_tbi == "yellow", , drop = FALSE]
+
+# Combine GS and MM for plotting
+combine_GS_MM_tbi <- data.frame(GS = abs(GS_yellow_tbi[, 1]), 
+                                MM = abs(MM_yellow_tbi),
+                                Module = factor(rep("yellow", length(MM_yellow_tbi))))
+
+plot_MM_vs_GS_tbi <- ggplot(combine_GS_MM_tbi, aes(x = MM, y = GS, colour = Module)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Module Membership (MM)",
+       y = "Gene Significance (GS) for TBI",
+       title = "Module Membership vs. Gene Significance\ncor = 0.83, p = 2.22e-308") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+
+print(plot_MM_vs_GS_tbi)
+
+# Save the plot
+ggsave("~/WGCNADMTBI/Output/plot_MM_vs_GS_tbi.png", plot = plot_MM_vs_GS_tbi, height = 6, width = 8, bg = "white")
+
+```
+
+Next, Get the shared genes based on the overlap of T1DM-related modules and TBI-related modules.
+
+```{r}
+
+# Find common genes based on the intercept of diabetes and TBI
+shared_genes <- intersect(genes_diabetes, genes_tbi)
+
+# Save shared genes to file for further analysis
+write.csv2(shared_genes, "~/WGCNADMTBI/Output/shared_genes.txt")
+
+```
+
+
+```{r}
+
+# Save important files into R for further analysis
+saveRDS(genes_tbi, file = "~/WGCNADMTBI/genes_tbi.rds")
+saveRDS(genes_diabetes, file = "~/WGCNADMTBI/genes_diabetes.rds")
+saveRDS(shared_genes, file = "~/WGCNADMTBI/shared_genes.rds")
+
+load("~/WGCNADMTBI/sft_net_tbi.RData")
+load("~/WGCNADMTBI/tbi_network.RData")
+load("~/WGCNADMTBI/diabetes_network.RData")
+
+```
+

@@ -1,0 +1,149 @@
+---
+title: "Batch correction"
+author: "Umar Faruk Saidu"
+date: "2024-08-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+## Batch correction
+
+This is an R Markdown document that contains code chunks for the batch correction using ComBat method in the "sva" package.
+
+First, perform batch correction for diabetes datasets.
+
+```{r}
+
+# Create batch variable
+batch_diabetes <- c(rep("batch1", ncol(norm_expr_diabetes1)), rep("batch2", ncol(norm_expr_diabetes2)))
+
+# Add batch column and combine the trait data
+combined_trait_diabetes <- rbind(trait_diabtes1 %>% mutate(Batch = "batch1"),
+                                 trait_diabtes2 %>% mutate(Batch = "batch2"))
+
+# Remove batch effects using ComBat
+mod_diabetes <- model.matrix(~1, data = combined_trait_diabetes)
+combat_expr_diabetes <- ComBat(dat = combined_expr_diabetes, batch = batch_diabetes, mod = mod_diabetes)
+
+# Save batch corrected count data
+write.csv(combat_expr_diabetes, "~/WGCNADMTBI/Output/combat_expr_diabetes.csv", row.names = TRUE)
+write.csv(combined_trait_diabetes, "~/WGCNADMTBI/Output/combined_trait_diabetes.csv", row.names = FALSE)
+
+# Convert to dataframe for ggplot2
+pca_before_diabetes <- prcomp(t(combined_expr_diabetes), scale. = TRUE)
+pca_before_diabetesdf <- as.data.frame(pca_before_diabetes$x[, 1:2])
+colnames(pca_before_diabetesdf) <- c("PC1", "PC2")
+pca_before_diabetesdf$Batch <- factor(batch_diabetes)
+
+pca_after_diabetes <- prcomp(t(combat_expr_diabetes), scale. = TRUE)
+pca_after_diabetesdf <- as.data.frame(pca_after_diabetes$x[, 1:2])
+colnames(pca_after_diabetesdf) <- c("PC1", "PC2")
+pca_after_diabetesdf$Batch <- factor(batch_diabetes)
+
+# Visualize the PCA plots
+pca_diabetes_plot1 <- ggplot(pca_before_diabetesdf, aes(x = PC1, y = PC2, color = Batch)) +
+  geom_point(size = 3) +
+  stat_ellipse(type = "norm", linetype = 1, linewidth = 1.2) +
+  labs(title = "Before batch correction", x = "PC1", y = "PC2") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "right")
+
+print(pca_diabetes_plot1)
+
+pca_diabetes_plot2 <- ggplot(pca_after_diabetesdf, aes(x = PC1, y = PC2, color = Batch)) +
+  geom_point(size = 3) +
+  stat_ellipse(type = "norm", linetype = 1, linewidth = 1.2) +
+  labs(title = "After batch correction", x = "PC1", y = "PC2") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "right")
+
+print(pca_diabetes_plot2)
+
+# Combine the plots in a ggplot object
+pcaplot_diabetes <- ggarrange(pca_diabetes_plot1, pca_diabetes_plot2, nrow = 1, common.legend = TRUE, legend = "top")
+
+print(pcaplot_diabetes)
+
+# Save the plots
+ggsave("~/WGCNADMTBI/Output/pca_diabetes_plot1.png", plot = pca_diabetes_plot1, width = 8,height = 6, bg = "white")
+ggsave("~/WGCNADMTBI/Output/pca_diabetes_plot2.png", plot = pca_diabetes_plot2, width = 8,height = 6, bg = "white")
+ggsave("~/WGCNADMTBI/Output/pcaplot_diabetes.png", plot = pcaplot_diabetes, width = 8,height = 6, bg = "white")
+
+```
+
+Now, perform batch correction for TBI datasets.
+
+```{r}
+
+# Create batch variable
+batch_tbi <- c(rep("batch1", ncol(norm_expr_tbi1)), rep("batch2", ncol(norm_expr_tbi2)))
+
+# Add batch column and combine the trait data
+combined_trait_tbi <- rbind(trait_TBI1 %>% mutate(Batch = "batch1"),
+                            trait_TBI2 %>% mutate(Batch = "batch2"))
+
+# Remove batch effects using ComBat
+mod_tbi <- model.matrix(~1, data = combined_trait_tbi)
+combat_expr_tbi <- ComBat(dat = combined_expr_tbi, batch = batch_tbi, mod = mod_tbi)
+
+# Save batch corrected count data
+write.csv(combat_expr_tbi, "~/WGCNADMTBI/Output/combat_expr_tbi.csv", row.names = TRUE)
+write.csv(combined_trait_tbi, "~/WGCNADMTBI/Output/combined_trait_tbi.csv", row.names = FALSE)
+
+# Convert to dataframe for ggplot2
+pca_before_tbi <- prcomp(t(combined_expr_tbi), scale. = TRUE)
+pca_before_tbidf <- as.data.frame(pca_before_tbi$x[, 1:2])
+colnames(pca_before_tbidf) <- c("PC1", "PC2")
+pca_before_tbidf$Batch <- factor(batch_tbi)
+
+pca_after_tbi <- prcomp(t(combat_expr_tbi), scale. = TRUE)
+pca_after_tbidf <- as.data.frame(pca_after_tbi$x[, 1:2])
+colnames(pca_after_tbidf) <- c("PC1", "PC2")
+pca_after_tbidf$Batch <- factor(batch_tbi)
+
+# Visualize the PCA plots
+pca_tbi_plot1 <- ggplot(pca_before_tbidf, aes(x = PC1, y = PC2, color = Batch)) +
+  geom_point(size = 3) +
+  stat_ellipse(type = "norm", linetype = 1, linewidth = 1.2) +
+  labs(title = "Before batch correction", x = "PC1", y = "PC2") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "right")
+
+print(pca_tbi_plot1)
+
+pca_tbi_plot2 <- ggplot(pca_after_tbidf, aes(x = PC1, y = PC2, color = Batch)) +
+  geom_point(size = 3) +
+  stat_ellipse(type = "norm", linetype = 1, linewidth = 1.2) +
+  labs(title = "After batch correction", x = "PC1", y = "PC2") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "right")
+
+print(pca_tbi_plot2)
+
+# Combine the plots in a ggplot object
+pcaplot_tbi <- ggarrange(pca_tbi_plot1, pca_tbi_plot2, nrow = 1, common.legend = TRUE, legend = "top")
+print(pcaplot_tbi)
+
+# You can choose to have both diabetes and TBI PCA plots in a single figure for publication
+pca_T1D_TBI <- ggarrange(pcaplot_diabetes, pcaplot_tbi, ncol = 1, nrow = 2, labels = c("A", "B"))
+
+print(pca_T1D_TBI)
+
+# Save the plots
+ggsave("~/WGCNADMTBI/Output/pca_tbi_plot1.png", plot = pca_tbi_plot1, width = 8,height = 6, bg = "white")
+ggsave("~/WGCNADMTBI/Output/pca_tbi_plot2.png", plot = pca_tbi_plot2, width = 8,height = 6, bg = "white")
+ggsave("~/WGCNADMTBI/Output/pcaplot_tbi.png", plot = pcaplot_tbi, width = 8,height = 6, bg = "white")
+ggsave("~/WGCNADMTBI/Output/pca_T1D_TBI.png", plot = pca_T1D_TBI, width = 8,height = 12, bg = "white")
+
+```
+
+

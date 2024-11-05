@@ -1,0 +1,247 @@
+---
+title: "Functional Enrichment Analysis"
+author: "Umar Faruk Saidu"
+date: "2024-09-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Functional Enrichment Analysis
+
+This is an R Markdown document for the functional enrichment analysis of key gene sets.
+
+```{r}
+# Load our files
+
+genes_tbi <- readRDS(file = "~/WGCNADMTBI/genes_tbi.rds")
+genes_diabetes <- readRDS(file = "~/WGCNADMTBI/genes_diabetes.rds")
+shared_genes <- readRDS(file = "~/WGCNADMTBI/shared_genes.rds")
+
+```
+
+
+```{r}
+
+stringMapping_diabetes <- read_delim("~/string_mapping_diabetes.tsv")
+stringMapping_tbi <- read_delim("~/string_mapping_tbi.tsv")
+
+genes_diabetes <- stringMapping_diabetes$preferredName
+genes_tbi <- stringMapping_tbi$preferredName
+shared_genes <- intersect(genes_diabetes, genes_tbi)
+
+```
+
+
+```{r}
+
+# First convert the Gene symbols into Entrez IDs
+entrez_diabetes <- bitr(genes_diabetes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Rn.eg.db)
+entrez_diabetes <- entrez_diabetes[!is.na(entrez_diabetes$ENTREZID), ]
+
+entrez_tbi <- bitr(genes_tbi, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Rn.eg.db)
+entrez_tbi <- entrez_tbi[!is.na(entrez_tbi$ENTREZID), ]
+
+entrez_shared <- bitr(shared_genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Rn.eg.db)
+
+```
+
+Perform enrichment analysis using clusterProfiler.
+
+```{r}
+
+# Perform GO enrichment analysis for diabetes
+go_enrich_diabetes_BP <- enrichGO(gene = entrez_diabetes$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "BP",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+go_enrich_diabetes_CC <- enrichGO(gene = entrez_diabetes$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "CC",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+go_enrich_diabetes_MF <- enrichGO(gene = entrez_diabetes$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "MF",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+# visualize the results
+plotBP_diabetes <- barplot(go_enrich_diabetes_BP, showCategory = 15) + ggtitle("Biological process") +
+  theme(plot.title = element_text(face = "bold"))
+
+plotCC_diabetes <- barplot(go_enrich_diabetes_CC, showCategory = 15) + ggtitle("Cellular component") +
+  theme(plot.title = element_text(face = "bold"))
+
+plotMF_diabetes <- barplot(go_enrich_diabetes_MF, showCategory = 15) + ggtitle("Molecular function") +
+  theme(plot.title = element_text(face = "bold"))
+
+# Perform KEGG enrichment analysis for diabetes
+
+kegg_diabetes <- enrichKEGG(gene = entrez_diabetes$ENTREZID, 
+                            organism = "rno",
+                            pAdjustMethod = "BH",
+                            qvalueCutoff = 0.05)
+# Visualize the result
+plotKegg_diabetes <- dotplot(kegg_diabetes, showCategory = 15) + ggtitle("Enriched pathways") +
+  theme(plot.title = element_text(face = "bold"))
+
+# Combine the plots into a single ggplot figure
+
+enrichment_diabetes <- plot_grid(plotBP_diabetes, plotCC_diabetes, plotMF_diabetes, plotKegg_diabetes,
+                                 align = "h", axis = "l", labels = "AUTO")
+
+# Save plots to file
+ggsave("~/WGCNADMTBI/Output/plotBP_diabetes.png", plot = plotBP_diabetes, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotCC_diabetes.png", plot = plotCC_diabetes, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotMF_diabetes.png", plot = plotMF_diabetes, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotKegg_diabetes.png", plot = plotKegg_diabetes, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/enrichment_diabetes.png", plot = enrichment_diabetes, width = 18, height = 11)
+
+save(go_enrich_diabetes_BP, go_enrich_diabetes_CC, go_enrich_diabetes_MF, kegg_diabetes,
+     file = "~/WGCNADMTBI/enrichment_diabetes.RData")
+
+```
+
+
+```{r}
+
+# Perform GO enrichment analysis for TBI
+go_enrich_tbi_BP <- enrichGO(gene = entrez_tbi$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "BP",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+go_enrich_tbi_CC <- enrichGO(gene = entrez_tbi$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "CC",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+go_enrich_tbi_MF <- enrichGO(gene = entrez_tbi$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "MF",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+# visualize the results
+plotBP_tbi <- barplot(go_enrich_tbi_BP, showCategory = 15) + ggtitle("Biological process") +
+  theme(plot.title = element_text(face = "bold"))
+
+plotCC_tbi <- barplot(go_enrich_tbi_CC, showCategory = 15, xlim = c(0, 8), ylim = c(0, 15)) +
+  ggtitle("Cellular component") +
+  theme(plot.title = element_text(face = "bold"))
+
+plotMF_tbi <- barplot(go_enrich_tbi_MF, showCategory = 15, xlim = c(0, 8), ylim = c(0, 15)) +
+  ggtitle("Molecular function") +
+  theme(plot.title = element_text(face = "bold"))
+
+# Perform KEGG enrichment analysis for diabetes
+
+kegg_tbi <- enrichKEGG(gene = entrez_tbi$ENTREZID, 
+                            organism = "rno",
+                            pAdjustMethod = "BH",
+                            qvalueCutoff = 0.05)
+# Visualize the result
+plotKegg_tbi <- dotplot(kegg_tbi, showCategory = 15) + 
+  ggtitle("Enriched pathways") +
+  theme(plot.title = element_text(face = "bold"))
+
+# Combine the plots into a single ggplot figure
+enrichment_tbi <- plot_grid(plotBP_tbi, plotCC_tbi, plotMF_tbi, plotKegg_tbi,
+                                 align = "h", axis = "l", labels = "AUTO")
+
+# Save plot to file
+ggsave("~/WGCNADMTBI/Output/plotBP_tbi.png", plot = plotBP_tbi, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotCC_tbi.png", plot = plotCC_tbi, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotMF_tbi.png", plot = plotMF_tbi, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotKegg_tbi.png", plot = plotKegg_tbi, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/enrichment_tbi.png", plot = enrichment_tbi, width = 18, height = 12)
+
+save(go_enrich_tbi_BP, go_enrich_tbi_CC, go_enrich_tbi_MF, kegg_tbi,
+     file = "~/WGCNADMTBI/enrichment_tbi.RData")
+
+```
+
+
+```{r}
+
+# Perform GO and KEGG analysis for shared genes
+go_enrich_shared_BP <- enrichGO(gene = entrez_shared$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "BP",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+go_enrich_shared_CC <- enrichGO(gene = entrez_shared$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "CC",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+go_enrich_shared_MF <- enrichGO(gene = entrez_shared$ENTREZID, 
+                                   OrgDb = org.Rn.eg.db,
+                                   ont = "MF",
+                                   minGSSize = 10,
+                                   maxGSSize = 500,
+                                   pAdjustMethod = "BH",
+                                   qvalueCutoff = 0.05)
+
+# Visualize plots
+plotBP_shared <- barplot(go_enrich_shared_BP, showCategory = 15, xlim = c(0, 8), ylim = c(0, 15)) +
+  ggtitle("Biological process") +
+  theme(plot.title = element_text(face = "bold"))
+
+plotCC_shared <- barplot(go_enrich_shared_CC, showCategory = 15, xlim = c(0, 8), ylim = c(0, 8)) +
+  ggtitle("Cellular component") +
+  theme(plot.title = element_text(face = "bold"))
+
+plotMF_shared <- barplot(go_enrich_shared_MF, showCategory = 15, xlim = c(0, 8), ylim = c(0, 8)) +
+  ggtitle("Molecular function") +
+  theme(plot.title = element_text(face = "bold"))
+
+# Perform KEGG enrichment analysis for shared genes
+kegg_shared <- enrichKEGG(gene = entrez_shared$ENTREZID, 
+                            organism = "rno",
+                            pAdjustMethod = "BH",
+                            qvalueCutoff = 0.05)
+
+plotkegg_shared <- dotplot(kegg_shared, showCategory = 15) +
+  ggtitle("Enriched pathways") +
+  theme(plot.title = element_text(face = "bold"))
+
+enrichment_shared <- plot_grid(plotBP_shared, plotCC_shared, plotMF_shared, plotkegg_shared,
+                                 align = "h", axis = "l", labels = "AUTO")
+# Save plots to file
+ggsave("~/WGCNADMTBI/Output/plotBP_shared.png", plot = plotBP_shared, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotCC_shared.png", plot = plotCC_shared, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotMF_shared.png", plot = plotMF_shared, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/plotkegg_shared.png", plot = plotkegg_shared, width = 8, height = 12)
+ggsave("~/WGCNADMTBI/Output/enrichment_shared.png", plot = enrichment_shared, width = 18, height = 12)
+
+save(go_enrich_shared_BP, go_enrich_shared_CC, go_enrich_shared_MF, kegg_shared, 
+     file = "~/WGCNADMTBI/enrichment_shared.RData")
+
+```

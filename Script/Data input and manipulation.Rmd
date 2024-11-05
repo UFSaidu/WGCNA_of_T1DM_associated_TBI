@@ -1,0 +1,361 @@
+---
+title: "Data input and manipulation"
+author: "Umar Faruk Saidu"
+date: "2024-06-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Input and Manipulation
+
+This is Rmarkdown for data input and manipulation.
+
+First, let's install all packages that are require for our analysis.
+
+```{r}
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+install.packages("BiocManager")
+BiocManager::install(c("WGCNA", "limma", "clusterProfiler", "enrichplot", "GEOquery", "edgeR", "org.Rn.eg.db", "DOSE", "EnhancedVolcano", "sva"))
+
+BiocManager::install("biomaRT")
+BiocManager::install("AnnotationDbi")
+BiocManager::install("gridExtra")
+BiocManager::install("org.Hs.eg.db")
+BiocManager::install("ggpubr")
+BiocManager::install("ComplexHeatmap")
+install.packages("ggdendro")
+install.packages("ggridges")
+install.packages("pheatmap")
+install.packages("gridGraphics")
+devtools::install_github("kevinblighe/CorLevelPlot")
+
+```
+
+We are going to load our packages into our working environment so that we can use them now that they have all installed successfully. Installing and loading the packages first is a recommended practice.
+
+```{r}
+
+library(WGCNA)
+library(limma)
+library(clusterProfiler)
+library(enrichplot)
+library(GEOquery)
+library(edgeR)
+library(org.Rn.eg.db)
+library(DOSE)
+library(biomaRt)
+library(EnhancedVolcano)
+library(sva)
+library(readr)
+library(tidyverse)
+library(reshape2)
+library(AnnotationDbi)
+library(gridExtra)
+library(ggpubr)
+library(ggdendro)
+library(org.Hs.eg.db)
+library(ggridges)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(circlize)
+library(pheatmap)
+library(gridGraphics)
+library(patchwork)
+library(cowplot)
+library(CorLevelPlot)
+```
+
+Download the data from the Gene Expression Omnibus (GEO) database. We will utilize the GEOquery library to download the diabetic and TBI datasets. We also obtain the metadata associated with these datasets. However, If we are unable to obtain the data using GEOquery, as is sometimes the case, we shall download them directly from the GEO website using their accession number.
+
+It's crucial to remember that not every step in this process will apply to your data. Like any data wrangling process, the procedures will vary depending on the type of datasets you have. As a result, you must apply any processes that your data may need and even include any actions that are not completed here. 
+
+First, get the first diabetes dataset.
+
+```{r}
+
+# Download first diabetes dataset
+geo_accession <- "GSE4745"
+diabetes_data_1 <- getGEO(geo_accession, GSEMatrix = TRUE)
+diabetes_data_1 <- diabetes_data_1[[1]]
+expr_data_diabetes1 <- exprs(diabetes_data_1)
+
+# Set as dataframe
+expr_data_diabetes1 <- as.data.frame(expr_data_diabetes1)
+
+# Change to long format
+l_expr_diabetes <- pivot_longer(expr_data_diabetes1, 1:length(expr_data_diabetes1), names_to = "Sample", values_to = "Counts")
+
+# Convert row names to ProbeID column
+expr_data_diabetes1 <- rownames_to_column(expr_data_diabetes1, "ProbeID")
+
+# Change to long format again
+l_expr_diabetes <- pivot_longer(expr_data_diabetes1, starts_with("GSM"), names_to = c("Sample"), values_to = "Counts")
+
+# Ensembl IDs or Gene symbols are absent from both the row count matrix and metadata. The annotation soft file will be used to obtain them
+
+# Download the SOFT annotation file and define path to its location on your computer
+soft_file_path <- "~/WGCNADMTBI/Input/GPL85.annot.gz"
+
+# Use GEOquery to parse the SOFT annotation file
+gse_soft <- getGEO(filename = soft_file_path)
+
+# Extract and select the gene symbol from the annotation SOFT file
+platform_data <- as.data.frame(Table(gse_soft))
+annotation <- platform_data %>% 
+  select(1,3)
+
+# Merge expression file with annotation file on ProbeID column
+merged_data <- l_expr_diabetes %>% 
+  left_join(annotation, by = c("ProbeID" = "ID"))
+
+# Some Gene symbols contain more than one symbol so we have to split them
+split_data <- merged_data %>% 
+  separate_rows(`Gene symbol`, sep = "///") %>% 
+  mutate(`Gene symbol` = str_trim(`Gene symbol`))
+
+# Aggregate Gene column to handle duplicate errors when setting Gene column as row names
+aggregated_data <- split_data %>% 
+  group_by(`Gene symbol`, Sample) %>% 
+  summarise(Counts = mean(Counts, na.rm = TRUE), .groups = 'drop')
+
+# Change back to the wider format
+final_data <- aggregated_data %>% 
+  pivot_wider(names_from = Sample, values_from = Counts)
+
+# Rename Gene symbol column to Gene (optional)
+final_data <- rename(final_data, Gene = `Gene symbol`)
+
+# One of the row has no Gene symbol so drop it
+missing_gene <- which(final_data$Gene == "")
+final_data <- final_data[-missing_gene,]
+
+# Set Gene column as row names
+rownames(final_data) <- final_data$Gene
+
+# Drop Gene column now that it is row names to avoid redundancy
+final_data <- final_data %>% 
+  select(-Gene)
+
+# Rename to diabetes_data1 for purpose of clarity (optional)
+diabetes_data1 <- final_data
+
+# Extract metadata and rename columns appropriately for clarity
+metadata_diabetes1 <- pData(diabetes_data_1)
+meta_data_diabetes1 <- metadata_diabetes1 %>% 
+  select(1,2,47) %>% 
+  rename(Sample = geo_accession, Group = `State:ch1`) %>% 
+  mutate(Group = recode(Group, "Diabetic" = "T1DM", "Control" = "HC"))
+
+# Create trait data for WGCNA and downstream analysis
+trait_diabtes1 <- meta_data_diabetes1[, -1]
+
+# Save to file
+write.csv(diabetes_data1, "~/WGCNADMTBI/Output/diabetes_data1.csv", row.names = TRUE)
+write.csv(meta_data_diabetes1, "~/WGCNADMTBI/Output/meta_data_diabetes1.csv", row.names = FALSE)
+write.csv(trait_diabtes1, "~/WGCNADMTBI/Output/trait_diabtes1.csv", row.names = FALSE)
+
+```
+
+Now, get the second diabetes dataset.
+
+```{r}
+
+# Load second diabetes dataset
+
+geo_accession <- "GSE125451"
+diabetes_data_2 <- getGEO(geo_accession, GSEMatrix = TRUE)
+diabetes_data_2 <- diabetes_data_2[[1]]
+expr_data_diabetes2 <- exprs(diabetes_data_2)
+
+# The getGEO method used above produced an empty count matrix. As a result, we retrieved the series sample files directly and combined them into a single count matrix.
+
+# List all the sample text files and remove any path using basename function
+
+files <- list.files("~/WGCNADMTBI/Input/GSM3574", pattern = "*.txt", full.names = TRUE, recursive = TRUE)
+
+files <- basename(files)
+
+# Create an empty data frame. This will hold the combined count matrix 
+results <- data.frame()
+
+# Using a for loop, read each count matrix, note which sample each row originated from, and then combine them using rbind
+
+for (file in files) {
+  x <- read_tsv(file, col_names = c("EnsemblID", "Count"))
+  sample_name <- stringr::str_replace(file, ".txt", "")
+  x$Sample <- sample_name
+  results <- rbind(results, x)
+}
+
+# Convert to wider format and remove the decimals in the Ensembl IDs
+diabetes_data2 <- results %>% 
+  tidyr::pivot_wider(names_from = Sample, values_from = Count) %>% 
+  mutate(EnsemblID = gsub("\\..*" , "", EnsemblID))
+  
+# Convert Ensembl IDs to Gene Symbols
+diabetes_data2$EnsemblID <- mapIds(org.Rn.eg.db, 
+                                   keys = diabetes_data2$EnsemblID,
+                                   keytype = "ENSEMBL",
+                                   column = "SYMBOL",
+                                   multiVals = "first")
+
+# Rename EnsemblID column to Gene for consistency
+diabetes_data2 <- diabetes_data2 %>% 
+  rename(Gene = EnsemblID)
+
+# Drop NA values in Gene column
+diabetes_data2 <- diabetes_data2[!is.na(diabetes_data2$Gene), ]
+
+# Aggregate Gene column to handle duplicate errors when setting Gene column as row names
+diabetes_data2 <- diabetes_data2 %>% 
+  group_by(Gene) %>% 
+  summarise(across(everything(), ~ mean(.x, na.rm = TRUE)))
+
+# Convert to dataframe
+diabetes_data2 <- as.data.frame(diabetes_data2)
+
+# Make Gene column as row names
+rownames(diabetes_data2) <- diabetes_data2$Gene
+
+# Remove Gene column now that it is row names to avoid redundancy
+diabetes_data2$Gene <- NULL
+
+# Extract metadata and rename columns appropriately for clarity
+metadata_diabetes2 <- pData(diabetes_data_2)
+meta_data_diabetes2 <- metadata_diabetes2 %>% 
+  select(1,2,43) %>% 
+  rename(Sample = geo_accession, Group = `agent:ch1`) %>% 
+  mutate(Group = recode(Group, "none" = "HC", "streptozotocin" = "T1DM"))
+
+# Create trait data for WGCNA and downstream analysis
+trait_diabtes2 <- meta_data_diabetes2[, -1]
+
+# Save to file
+write.csv(diabetes_data2, "~/WGCNADMTBI/Output/diabetes_data2.csv", row.names = TRUE)
+write.csv(meta_data_diabetes2, "~/WGCNADMTBI/Output/meta_data_diabetes2.csv", row.names = FALSE)
+write.csv(trait_diabtes2, "~/WGCNADMTBI/Output/trait_diabtes2.csv", row.names = FALSE)
+
+```
+
+Having completed the formatting and manipulation of the diabetes datasets, we will now proceed to the TBI datasets.
+
+First, get the first TBI dataset.
+
+```{r}
+
+# Load first TBI dataset count matrix
+tbi_count_matrix <- read_delim("~/WGCNADMTBI/Input/GSE173975_TBI_GENE_MATRIX.txt", col_names = TRUE)
+
+# Ensure no leading/trailing spaces. This is optional depending on your data.
+tbi_count_matrix$Gene <- trimws(tbi_count_matrix$Gene)
+
+# Remove and identify duplicates
+duplicates <- tbi_count_matrix$Gene[duplicated(tbi_count_matrix$Gene)]
+  if (length(duplicates) > 0) {
+    print(paste("Found duplicates: ", paste(unique(duplicates), collapse = ", ")))
+  } else {
+    print("No duplicates found")
+  }
+
+# Remove duplicates if present
+tbi_count_matrix <- tbi_count_matrix[!duplicated(tbi_count_matrix$Gene),]
+
+# Change tibble to data frame
+tbi_count_matrix <- as.data.frame(tbi_count_matrix)
+
+# Rearrange the column names to match Sample names in the metadata
+tbi_data1 <- tbi_count_matrix %>% 
+  select(c("Gene", "Sham.1.rep1", "Sham.1.rep2", "Sham.14.rep1", "Sham.14.rep2", "Sham.14.rep3", "Sham.14.rep4", "TBI.1.rep1", "TBI.1.rep2", "TBI.1.rep3", "TBI.1.rep4", "TBI.14.rep1", "TBI.14.rep2", "TBI.14.rep3", "TBI.14.rep4"))
+
+# We want the count matrix to have geo_accession numbers as sample names. Thus, we will rename the columns with geo_accession numbers. Ensure the order of columns are maintained as in the metadata
+colnames(tbi_data1) <- c("Gene", "GSM5283787", "GSM5283788", "GSM5283789", "GSM5283790", "GSM5283791", "GSM5283792", "GSM5283793", "GSM5283794", "GSM5283795", "GSM5283796", "GSM5283797", "GSM5283798", "GSM5283799", "GSM5283800")
+
+# Set Gene column as row names
+rownames(tbi_data1) <- tbi_data1$Gene
+
+# Drop Gene column now that it's row names
+tbi_data1 <- tbi_data1[, !colnames(tbi_data1) %in% 'Gene']
+
+# Get metadata for the first TBI dataset and rename columns appropriately
+tbi_data <- getGEO("GSE173975", GSEMatrix = TRUE)
+metadata_tbi <- pData(tbi_data)
+metadata_tbi <- metadata_tbi %>% 
+  select(1,2,21,48) %>% 
+  rename(Sample = description.1, Group = `protocol:ch1`) %>% 
+  mutate(Group = recode(Group, "Sham" = "HC"))
+
+# Subset the metadata to just include TBI RNA-seq data
+metadata_tbi1 <- metadata_tbi[-(15:23), ]
+
+# Create trait data for the first TBI dataset
+trait_TBI1 <- metadata_tbi_subset %>% 
+  select(2,4) %>% 
+  rename("Sample" = "geo_accession")
+
+# Save to file
+write.csv(tbi_data1, "~/WGCNADMTBI/Output/tbi_data1.csv", row.names = TRUE)
+write.csv(metadata_tbi1, "~/WGCNADMTBI/Output/metadata_tbi1.csv", row.names = FALSE)
+write.csv(trait_TBI1, "~/WGCNADMTBI/Output/trait_TBI1.csv", row.names = FALSE)
+
+```
+
+Now, get the second TBI dataset.
+
+```{r}
+
+# Load second TBI dataset count matrix
+tbi_count_matrix2 <- read_delim("~/WGCNADMTBI/Input/GSE80174_Hippocampus_DEseq2_raw_counts.txt", col_names = TRUE)
+
+# Rearrange the colnames to match Sample names in the metadata
+tbi_data2 <- tbi_count_matrix2 %>% 
+  select(c("Gene" = "Ensembl_Gene_ID", "RatID_1_mRNA", "Rat2_sham_hippo_mrna_FC120_3.bam", "Rat3_sham_hippo_mrna_FC120_5.bam", "Rat4_sham_hippo_mrna_FC120_7.bam", "Rat5_sham_hippo_mrna_FC122_1.bam", "Rat6_trauma_hippo_mrna_FC120_2.bam", "Rat7_trauma_hippo_mrna_FC120_4.bam", "Rat8_trauma_hippo_mrna_FC120_6.bam", "Rat9_trauma_hippo_mrna_FC120_8.bam", "Rat10_trauma_hippo_mrna_FC122_2.bam"))
+
+# We want the count matrix to have geo_accession numbers as sample names. Thus, we will rename the columns with geo_accession numbers. Ensure the order of columns are maintained as in the metadata
+colnames(tbi_data2) <- c("Gene", "GSM2114177", "GSM2114178", "GSM2114179", "GSM2114180", "GSM2114181", "GSM2114182", "GSM2114183", "GSM2114184", "GSM2114185", "GSM2114186")
+
+# Convert Ensembl IDS to Gene Symbols
+tbi_data2$Gene <- mapIds(org.Rn.eg.db, 
+                         keys = tbi_data2$Gene,
+                         keytype = "ENSEMBL",
+                         column = "SYMBOL",
+                         multiVals = "first")
+
+# Remove NA values in Gene column
+tbi_data2 <- tbi_data2[!is.na(tbi_data2$Gene), ] 
+
+# Aggregate Gene column to handle duplicate errors when setting Gene column as row names
+tbi_data2 <- tbi_data2 %>% 
+  group_by(Gene) %>% 
+  summarise(across(everything(), ~ mean(.x, na.rm = TRUE)))
+  
+# Convert to dataframe
+tbi_data2 <- as.data.frame(tbi_data2)
+
+# Set Gene column as row names
+rownames(tbi_data2) <- tbi_data2$Gene
+
+# Remove Gene column now that it is row names to avoid redundancy
+tbi_data2$Gene <- NULL
+
+# Load metadata for second TBI dataset
+metadata_tbi2 <- read_csv("~/WGCNADMTBI/Input/metadata_tbi2.csv", col_names = TRUE)
+
+# Create trait data for the second TBI dataset
+trait_TBI2 <- metadata_tbi2 %>% 
+  select(2,4)
+
+trait_TBI2 <- as.data.frame(trait_TBI2)
+
+# Set Sample column as row names
+rownames(trait_TBI2) <- trait_TBI2$Sample
+
+# Save to file
+write.csv(tbi_data2, "~/WGCNADMTBI/Output/tbi_data2.csv", row.names = TRUE)
+write.csv(metadata_tbi2, "~/WGCNADMTBI/Output/metadata_tbi2.csv", row.names = FALSE)
+write.csv(trait_TBI2, "~/WGCNADMTBI/Output/trait_TBI2.csv", row.names = FALSE)
+
+```
